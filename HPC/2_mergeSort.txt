@@ -1,0 +1,142 @@
+/* 2 merge
+==================== THEORY FOR VIVA =====================
+
+🌀 MERGE SORT:
+- A classic divide-and-conquer sorting algorithm.
+- It recursively divides the array into halves, sorts each half, and merges them.
+- Time Complexity: O(n log n)
+- Space Complexity: O(n) due to auxiliary arrays used during merging.
+- Stable sorting algorithm.
+
+⚡ PARALLEL MERGE SORT:
+- Suitable for parallelization because the two halves are sorted independently.
+- We use OpenMP `parallel sections` to allow sorting left and right parts simultaneously.
+- After both halves are sorted, we merge them sequentially.
+- Reduces the time complexity practically by using available cores.
+
+🔧 OPENMP CONCEPTS USED:
+- `#pragma omp parallel sections`: Divides code blocks (sections) to run in parallel.
+- `#pragma omp section`: Specifies a section of code to run concurrently.
+- `omp_get_wtime()`: Used to calculate execution time (wall-clock).
+
+🧠 KEY POINT:
+- Merging is sequential but sorting halves is parallel, leading to good parallel performance for large inputs.
+
+===========================================================
+*/
+
+#include <iostream>      // For input/output
+#include <omp.h>         // For OpenMP parallelism
+
+using namespace std;
+
+// Merge function to combine two sorted subarrays
+void merge(int arr[], int low, int mid, int high) {
+    int n1 = mid - low + 1;      // Length of left subarray
+    int n2 = high - mid;         // Length of right subarray
+
+    int left[n1], right[n2];     // Temporary arrays
+
+    // Copy left half
+    for (int i = 0; i < n1; i++) left[i] = arr[low + i];
+
+    // Copy right half
+    for (int j = 0; j < n2; j++) right[j] = arr[mid + 1 + j];
+
+    int i = 0, j = 0, k = low;
+
+    // Merge left and right arrays
+    while (i < n1 && j < n2) {
+        if (left[i] <= right[j])
+            arr[k++] = left[i++];
+        else
+            arr[k++] = right[j++];
+    }
+
+    // Copy any remaining elements
+    while (i < n1) arr[k++] = left[i++];
+    while (j < n2) arr[k++] = right[j++];
+}
+
+// Sequential Merge Sort implementation
+void mergeSort(int arr[], int low, int high) {
+    if (low < high) {
+        int mid = (low + high) / 2;
+
+        mergeSort(arr, low, mid);         // Sort left half
+        mergeSort(arr, mid + 1, high);    // Sort right half
+        merge(arr, low, mid, high);       // Merge both halves
+    }
+}
+
+// Parallel Merge Sort using OpenMP
+void parallelMergeSort(int arr[], int low, int high) {
+    if (low < high) {
+        int mid = (low + high) / 2;
+
+        // Run two recursive calls in parallel
+        #pragma omp parallel sections
+        {
+            #pragma omp section
+            {
+                parallelMergeSort(arr, low, mid);     // Sort left
+            }
+
+            #pragma omp section
+            {
+                parallelMergeSort(arr, mid + 1, high); // Sort right
+            }
+        }
+
+        merge(arr, low, mid, high); // Merge after both halves are sorted
+    }
+}
+
+// Main function
+int main() {
+    int n = 10;
+    int arr[n];
+    double start_time, end_time;
+
+    // Fill array with descending numbers
+    for (int i = 0, j = n; i < n; i++, j--) arr[i] = j;
+
+    // Sequential Merge Sort
+    start_time = omp_get_wtime();
+    mergeSort(arr, 0, n - 1);
+    end_time = omp_get_wtime();
+    cout << "Time taken by sequential algorithm: " << end_time - start_time << " seconds\n";
+
+    // Reset array
+    for (int i = 0, j = n; i < n; i++, j--) arr[i] = j;
+
+    // Parallel Merge Sort
+    start_time = omp_get_wtime();
+    parallelMergeSort(arr, 0, n - 1);
+    end_time = omp_get_wtime();
+    cout << "Time taken by parallel algorithm: " << end_time - start_time << " seconds\n";
+
+    return 0;
+}
+
+/*
+==================== COMPILATION INSTRUCTIONS ====================
+
+⚠️ If you get "undefined reference to `omp_get_wtime`", you're missing the OpenMP flag.
+
+✅ To compile with OpenMP, use the following command:
+
+    g++ -fopenmp filename.cpp -o outputname
+
+✅ To run:
+
+    ./outputname
+    ./a.out
+
+📌 Notes:
+- `-fopenmp` is required to enable OpenMP support and link the correct library.
+- Works only on systems where OpenMP is installed (like GCC on Linux).
+- Most online compilers DO NOT support OpenMP – use your local machine or lab system.
+
+=================================================================
+*/

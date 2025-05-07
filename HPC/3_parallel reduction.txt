@@ -1,0 +1,121 @@
+/* 3rd parallel reduction
+  ========================== THEORY FOR VIVA ==========================
+  🧠 OpenMP (Open Multi-Processing) Overview:
+  - OpenMP is an API for writing parallel code in C, C++, and Fortran.
+  - It supports multi-threaded, shared-memory parallelism using simple pragmas.
+  - Ideal for loop-level parallelism on multi-core processors.
+
+  ✅ Key OpenMP Directives:
+  - #pragma omp parallel         → Defines a parallel region.
+  - #pragma omp for              → Distributes loop iterations among threads.
+  - #pragma omp parallel for     → Combines both parallel region and loop distribution.
+  - #pragma omp critical         → Defines a critical section that only one thread can execute at a time.
+  - #pragma omp reduction(op : var) → Combines results from all threads into one variable using operator (e.g., +, *, min, max).
+
+  🔁 Reduction:
+  - Used to prevent race conditions when multiple threads update the same variable.
+  - OpenMP combines private copies of the variable from each thread using the specified operator.
+  - Syntax: reduction(operator : variable)
+  - Examples:
+      + : sum       → used for addition
+      * : product   → used for multiplication
+      min : minval  → used for finding minimum (not supported on MSVC)
+      max : maxval  → used for finding maximum
+
+  ⚠️ NOTE for Windows Users:
+  - MSVC (Microsoft Visual C++) does not support `min` and `max` reductions.
+  - Use Linux or Windows Subsystem for Linux (WSL) for full compatibility.
+
+  ========================== COMPILING ON UBUNTU ==========================
+  📦 Install GCC with OpenMP support (if not installed):
+      sudo apt update
+      sudo apt install g++
+
+  🛠 Compile the code with OpenMP flag:
+      g++ -fopenmp filename.cpp -o outputname
+
+  ▶️ Run the program:
+      ./outputname
+  ========================================================================
+*/
+
+#include<iostream>           // Header for standard input/output
+#include<omp.h>              // OpenMP header for parallel processing
+
+using namespace std;
+
+// Function to calculate minimum value using OpenMP reduction
+int minval(int arr[], int n){
+  int minval = arr[0];       // Initialize minval with first element
+
+  /*
+    🔍 Explanation:
+    #pragma omp parallel for reduction(min : minval)
+    - This parallelizes the loop.
+    - Each thread gets a private copy of `minval`.
+    - After loop ends, OpenMP finds the overall minimum across all threads.
+  */
+  #pragma omp parallel for reduction(min : minval)
+  for(int i = 0; i < n; i++){
+    if(arr[i] < minval) minval = arr[i]; // Update if smaller value found
+  }
+
+  return minval;             // Return final minimum
+}
+
+// Function to calculate maximum value using OpenMP reduction
+int maxval(int arr[], int n){
+  int maxval = arr[0];       // Initialize maxval with first element
+
+  /*
+    🔍 Explanation:
+    #pragma omp parallel for reduction(max : maxval)
+    - This parallelizes the loop.
+    - Each thread keeps track of its local max.
+    - OpenMP then reduces to the global max using `max` operation.
+  */
+  #pragma omp parallel for reduction(max : maxval)
+  for(int i = 0; i < n; i++){
+    if(arr[i] > maxval) maxval = arr[i]; // Update if larger value found
+  }
+
+  return maxval;             // Return final maximum
+}
+
+// Function to calculate sum using OpenMP reduction
+int sum(int arr[], int n){
+  int sum = 0;               // Initialize sum to zero
+
+  /*
+    🔍 Explanation:
+    #pragma omp parallel for reduction(+ : sum)
+    - Parallelizes the loop.
+    - Each thread computes local sum of its chunk.
+    - OpenMP adds them up at the end to produce final sum.
+  */
+  #pragma omp parallel for reduction(+ : sum)
+  for(int i = 0; i < n; i++){
+    sum += arr[i];           // Add each element to sum
+  }
+
+  return sum;                // Return total sum
+}
+
+// Function to calculate average by dividing sum by number of elements
+int average(int arr[], int n){
+  return (double)sum(arr, n) / n; // Use sum function and divide by n to get average
+}
+
+// Main function
+int main(){
+  int n = 5;                 // Size of array
+  int arr[] = {1,2,3,4,5};   // Initialize array with sample values
+
+  // Display computed statistics
+  cout << "The minimum value is: " << minval(arr, n) << '\n';
+  cout << "The maximum value is: " << maxval(arr, n) << '\n';
+  cout << "The summation is: " << sum(arr, n) << '\n';
+  cout << "The average is: " << average(arr, n) << '\n';
+
+  return 0;                  // Return success status
+}

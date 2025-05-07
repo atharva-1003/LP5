@@ -1,0 +1,134 @@
+/* 1st dfs bfs
+==================== THEORY FOR VIVA ====================
+
+🌐 GRAPH BASICS:
+- A graph is a collection of vertices (nodes) connected by edges.
+- Graphs can be directed (edges have direction) or undirected.
+- Common ways to represent graphs include:
+  1. Adjacency Matrix
+  2. Adjacency List (used here for space efficiency)
+
+📌 DEPTH-FIRST SEARCH (DFS):
+- DFS is a graph traversal technique that explores as far as possible along each branch before backtracking.
+- It uses recursion or a stack.
+- Time Complexity: O(V + E), where V = vertices, E = edges
+
+📌 BREADTH-FIRST SEARCH (BFS):
+- BFS explores all neighbors of a node before moving to the next level.
+- It uses a queue.
+- Time Complexity: O(V + E)
+
+⚡ PARALLEL PROGRAMMING WITH OpenMP:
+- OpenMP is an API for shared-memory multiprocessing.
+- The `#pragma omp parallel for` directive parallelizes loops across threads.
+- Care must be taken to avoid **race conditions** (when threads access shared data simultaneously).
+
+⚠ PARALLEL DFS/BFS CHALLENGES:
+- DFS is inherently recursive and hard to parallelize due to shared state (visited[]).
+- BFS can be parallelized per level, but shared structures like queue and visited[] need synchronization (e.g., critical sections).
+
+=========================================================
+*/
+
+#include <iostream>     // For input/output
+#include <vector>       // For vector (used in adjacency list)
+#include <queue>        // For BFS queue
+#include <omp.h>        // For OpenMP parallelization
+
+using namespace std;
+
+// Graph class with adjacency list representation
+class Graph {
+    int V;                          // Number of vertices
+    vector<vector<int>> adj;       // Adjacency list
+
+public:
+    // Constructor
+    Graph(int V) : V(V), adj(V) {}
+
+    // Function to add a directed edge from v to w
+    void addEdge(int v, int w) {
+        adj[v].push_back(w);
+    }
+
+    // Parallel Depth-First Search (caution: not thread-safe)
+    void parallelDFS(int startVertex) {
+        vector<bool> visited(V, false);         // Visited vector to mark nodes
+        parallelDFSUtil(startVertex, visited);  // Start DFS
+    }
+
+    // Utility function for DFS (recursive)
+    void parallelDFSUtil(int v, vector<bool>& visited) {
+        visited[v] = true;      // Mark current node as visited
+        cout << v << " ";       // Output current node
+
+        // Parallel for loop to explore adjacent nodes
+        #pragma omp parallel for
+        for (int i = 0; i < adj[v].size(); ++i) {
+            int n = adj[v][i];  // Neighbor
+            if (!visited[n])    // Check if not visited
+                parallelDFSUtil(n, visited);  // Recursive DFS call (not thread-safe)
+        }
+    }
+
+    // Parallel Breadth-First Search (not thread-safe)
+    void parallelBFS(int startVertex) {
+        vector<bool> visited(V, false);  // Track visited nodes
+        queue<int> q;                    // Queue for BFS
+
+        visited[startVertex] = true;     // Mark start node
+        q.push(startVertex);             // Enqueue start node
+
+        while (!q.empty()) {
+            int v = q.front();           // Dequeue a vertex
+            q.pop();
+            cout << v << " ";            // Output current node
+
+            // Parallel for to go through all neighbors
+            #pragma omp parallel for
+            for (int i = 0; i < adj[v].size(); ++i) {
+                int n = adj[v][i];       // Get neighbor
+                if (!visited[n]) {       // If not visited
+                    visited[n] = true;   // Mark visited
+                    q.push(n);           // Enqueue neighbor
+                    // ⚠ Potential data race here
+                }
+            }
+        }
+    }
+};
+
+// Main function
+int main() {
+    // Create a graph with 7 vertices
+    Graph g(7);
+
+    // Add directed edges to the graph
+    g.addEdge(0, 1);
+    g.addEdge(0, 2);
+    g.addEdge(1, 3);
+    g.addEdge(1, 4);
+    g.addEdge(2, 5);
+    g.addEdge(2, 6);
+
+    /*
+        Graph Structure:
+        0 --> 1 --> 3
+         \     \--> 4
+          \
+           \--> 2 --> 5
+                   \--> 6
+    */
+
+    // Perform and display DFS traversal
+    cout << "Depth-First Search (DFS): ";
+    g.parallelDFS(0);
+    cout << endl;
+
+    // Perform and display BFS traversal
+    cout << "Breadth-First Search (BFS): ";
+    g.parallelBFS(0);
+    cout << endl;
+
+    return 0;
+}

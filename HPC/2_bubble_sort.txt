@@ -1,0 +1,127 @@
+/* 2nd bubble
+==================== THEORY FOR VIVA =====================
+
+🌀 BUBBLE SORT:
+- Simple comparison-based sorting algorithm.
+- Repeatedly compares adjacent elements and swaps them if they are in the wrong order.
+- Time Complexity: O(n^2) in worst case.
+- Stable and In-place sorting.
+
+⚡ PARALLEL BUBBLE SORT (ODD-EVEN TRANSPOSITION SORT):
+- Direct Bubble Sort is not easily parallelizable due to data dependencies.
+- Instead, we use Odd-Even Transposition Sort:
+  → In odd phase, compare (1,2), (3,4), ...
+  → In even phase, compare (0,1), (2,3), ...
+- These phases can be executed in parallel as comparisons are independent within a phase.
+- Best suited for shared memory systems using OpenMP.
+
+🔧 OPENMP BASICS:
+- `#pragma omp parallel`: Spawns a team of threads.
+- `#pragma omp for`: Distributes loop iterations among threads.
+- `#pragma omp barrier`: Ensures all threads complete current phase before moving on.
+- `omp_get_wtime()`: Returns current wall-clock time (used to benchmark execution time).
+
+===========================================================
+*/
+
+#include <iostream>      // For input/output
+#include <omp.h>         // For OpenMP parallelism
+#include <algorithm>     // For std::swap
+
+using namespace std;
+
+// Sequential Bubble Sort
+void bubble(int array[], int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (array[j] > array[j + 1]) {
+                swap(array[j], array[j + 1]);
+            }
+        }
+    }
+}
+
+// Parallel Bubble Sort using Odd-Even Transposition
+void pBubble(int array[], int n) {
+    for (int i = 0; i < n; ++i) {
+        #pragma omp parallel
+        {
+            // Odd indexed phase: compare (1,2), (3,4), ...
+            #pragma omp for
+            for (int j = 1; j < n - 1; j += 2) {
+                if (array[j] > array[j + 1]) {
+                    swap(array[j], array[j + 1]);
+                }
+            }
+
+            #pragma omp barrier
+
+            // Even indexed phase: compare (0,1), (2,3), ...
+            #pragma omp for
+            for (int j = 0; j < n - 1; j += 2) {
+                if (array[j] > array[j + 1]) {
+                    swap(array[j], array[j + 1]);
+                }
+            }
+        }
+    }
+}
+
+// Utility function to print the array
+void printArray(int arr[], int n) {
+    for (int i = 0; i < n; i++) cout << arr[i] << " ";
+    cout << "\n";
+}
+
+// Main driver
+int main() {
+    int n = 10;
+    int arr[n];
+    double start_time, end_time;
+
+    // Fill array in reverse order (worst case for bubble sort)
+    for (int i = 0, j = n; i < n; i++, j--) arr[i] = j;
+
+    // Measure time for Sequential Bubble Sort
+    start_time = omp_get_wtime();
+    bubble(arr, n);
+    end_time = omp_get_wtime();
+    cout << "Sequential Bubble Sort took : " << end_time - start_time << " seconds.\n";
+    printArray(arr, n);
+
+    // Reset array to reverse order again
+    for (int i = 0, j = n; i < n; i++, j--) arr[i] = j;
+
+    // Measure time for Parallel Bubble Sort
+    start_time = omp_get_wtime();
+    pBubble(arr, n);
+    end_time = omp_get_wtime();
+    cout << "Parallel Bubble Sort took : " << end_time - start_time << " seconds.\n";
+    printArray(arr, n);
+
+    return 0;
+}
+
+/*
+==================== COMPILATION INSTRUCTIONS ====================
+
+⚠️ ERROR: "undefined reference to `omp_get_wtime`"
+→ Occurs if OpenMP is not enabled during compilation.
+
+✅ Compile with OpenMP using:
+    g++ -fopenmp filename.cpp -o outputname
+
+✅ Example:
+    g++ -fopenmp bubble_sort.cpp -o bubble
+
+✅ Run the executable:
+    ./bubble
+
+📌 Notes:
+- `-fopenmp` flag is essential to enable OpenMP features and link its library.
+- This program will only show parallel speedup benefits on systems with multiple cores.
+- Do not expect much speedup for small `n` like 10; use larger sizes to observe benefits.
+- Some online compilers don't support OpenMP – use a local GCC setup.
+
+=================================================================
+*/
