@@ -1,0 +1,170 @@
+%%writefile parallel_graph_traversal.cpp
+/*
+==================== VIVA THEORY NOTES =====================
+
+🧠 GRAPH BASICS:
+- A graph is a set of vertices (nodes) connected by edges.
+- Can be directed or undirected.
+- Efficiently represented using adjacency lists.
+
+📌 DEPTH-FIRST SEARCH (DFS):
+- Explores as far as possible along a branch before backtracking.
+- Implemented via recursion or stack.
+- Time Complexity: O(V + E)
+- Not easily parallelized due to shared state and recursion.
+
+📌 BREADTH-FIRST SEARCH (BFS):
+- Explores neighbors level-by-level using a queue.
+- Time Complexity: O(V + E)
+- More suitable for parallelization (level-synchronous BFS).
+
+⚡ OpenMP:
+- API for parallel programming on shared-memory systems.
+- `#pragma omp parallel for` distributes loop iterations.
+- Use `atomic`, `critical`, or thread-local storage to avoid race conditions.
+
+⚠ PARALLEL DFS/BFS CHALLENGES:
+- DFS is inherently recursive and hard to parallelize due to shared state (visited[]).
+- BFS can be parallelized per level, but shared structures like queue and visited[] need synchronization (e.g., critical sections).
+
+============================================================
+*/
+/*
+To compile and run the code:
+
+1. Install OpenMP (if not installed):
+   - On Linux, you may need to install OpenMP with the following command:
+     sudo apt-get install libomp-dev
+
+2. Compile the code:
+   g++ -fopenmp -o parallel_graph_traversal parallel_graph_traversal.cpp
+
+3. Run the compiled program:
+   ./parallel_graph_traversal
+*/
+
+#include <iostream>          // Standard input/output for displaying results
+#include <vector>            // For using adjacency list representation of the graph
+#include <queue>             // For BFS using a queue
+#include <atomic>            // For atomic operations (avoiding race conditions)
+#include <omp.h>             // For parallelization using OpenMP
+
+using namespace std;
+
+class Graph {
+    int V;                          // Number of vertices in the graph
+    vector<vector<int>> adj;       // Adjacency list to store graph edges
+
+public:
+    // Constructor to initialize the graph with V vertices
+    Graph(int V) : V(V), adj(V) {}
+
+    // Function to add an edge from vertex v to vertex w
+    void addEdge(int v, int w) {
+        adj[v].push_back(w);    // Adds vertex w to the adjacency list of vertex v
+    }
+
+    // --------------------- DFS SECTION ----------------------
+
+    // Helper function for DFS - sequential & safe
+    void safeDFS(int v, vector<bool>& visited) {
+        visited[v] = true;              // Mark current vertex as visited
+        cout << v << " ";               // Print current vertex
+
+        // Explore each neighbor recursively
+        for (int neighbor : adj[v]) {
+            if (!visited[neighbor]) {  // If neighbor is not visited yet
+                safeDFS(neighbor, visited);  // Recursively call DFS on neighbor
+            }
+        }
+    }
+
+    // Run DFS from the given start vertex
+    void runDFS(int startVertex) {
+        vector<bool> visited(V, false);  // Initialize visited vector for all vertices as false
+        safeDFS(startVertex, visited);   // Start DFS from the given vertex
+    }
+
+    // --------------------- BFS SECTION ----------------------
+
+    // Parallel BFS using OpenMP and atomic visited
+    // Corrected Parallel BFS using OpenMP with ordered output
+    void parallelBFS(int startVertex) {
+        vector<atomic<bool>> visited(V);   // Vector of atomic bool to track visited vertices
+        for (int i = 0; i < V; ++i)
+            visited[i] = false;            // Initialize all vertices as unvisited
+
+        vector<int> frontier;              // The current level's frontier (set of vertices to explore)
+        frontier.push_back(startVertex);   // Start BFS from the given vertex
+        visited[startVertex] = true;       // Mark start vertex as visited
+
+        // Print start vertex first
+        cout << startVertex << " ";
+
+        while (!frontier.empty()) {
+            vector<int> next_frontier;    // Next frontier (next level of vertices to explore)
+
+            #pragma omp parallel          // Parallel block using OpenMP
+            {
+                vector<int> local_next;   // Thread-local frontier for safe collection of results
+
+                #pragma omp for nowait      // Distribute iterations of loop across threads
+                for (int i = 0; i < frontier.size(); ++i) {
+                    int v = frontier[i];  // Get vertex from the current frontier
+
+                    // Traverse all neighbors
+                    for (int neighbor : adj[v]) {
+                        // Atomically mark visited to avoid race conditions
+                        if (!visited[neighbor].exchange(true)) {  // If not visited yet, mark and add to local frontier
+                            local_next.push_back(neighbor);
+                        }
+                    }
+                }
+
+                // Safely merge thread-local next frontier into global next_frontier
+                #pragma omp critical
+                next_frontier.insert(next_frontier.end(), local_next.begin(), local_next.end());
+            }
+
+            // Print next frontier in order (after the parallel region)
+            for (int node : next_frontier) {
+                cout << node << " ";         // Print all nodes in the next frontier (level)
+            }
+
+            frontier = move(next_frontier);   // Move next frontier to the current frontier for next iteration
+        }
+    }
+};
+
+// --------------------- MAIN FUNCTION ----------------------
+
+int main() {
+    Graph g(7);  // Create a graph with 7 nodes (0 to 6)
+
+    // Add directed edges between vertices
+    g.addEdge(0, 1);
+    g.addEdge(0, 2);
+    g.addEdge(1, 3);
+    g.addEdge(1, 4);
+    g.addEdge(2, 5);
+    g.addEdge(2, 6);
+
+    /*
+        Graph structure:
+            0
+           / \
+          1   2
+         / \ / \
+        3  4 5  6
+    */
+
+    cout << "Depth-First Search (DFS): ";   // Print message indicating DFS
+    g.runDFS(0);                          // Run DFS starting from vertex 0
+    cout << "\n";
+
+    cout << "Breadth-First Search (BFS): ";  // Print message indicating BFS
+    g.parallelBFS(0);                       // Run parallel BFS starting from vertex 0
+    cout << "\n";
+
+    return 0;  // End of the main function
+}
